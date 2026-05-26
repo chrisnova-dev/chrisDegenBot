@@ -74,7 +74,7 @@ export const handleWalletCallback = async (ctx: Context, action: string) => {
     ]);
 
     await ctx.answerCbQuery();
-    await ctx.editMessageText(text, { parse_mode: 'Markdown', ...keyboard });
+    await ctx.editMessageText(text, { parse_mode: 'Markdown', ...keyboard } as any);
   }
 
   if (action.startsWith('with_scale_')) {

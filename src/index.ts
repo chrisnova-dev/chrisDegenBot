@@ -178,10 +178,10 @@ bot.on('text', async (ctx) => {
   await handleContractPaste(ctx, text);
 });
 
-// ─── LAUNCH ───────────────────────────────────────────────────
 bot.launch()
-  .then(() => console.log('🤖 NOVATRACK running!'))
-  .catch((err) => console.error('[BOT] Launch error:', err));
+  .then(() => {
+    console.log('🤖 NOVATRACK running!');
 
-process.once('SIGINT', () => bot.stop('SIGINT'));
-process.once('SIGTERM', () => bot.stop('SIGTERM'));
+    positionMonitor.initializeFromStart(bot, ALLOWED_USER_ID);
+  })
+  .catch((err) => console.error('[BOT] Launch error:', err));

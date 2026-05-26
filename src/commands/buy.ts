@@ -1,11 +1,11 @@
-import { Context, Markup } from 'telegraf';
-import { PublicKey } from '@solana/web3.js';
-import fetch from 'cross-fetch';
-import { jupiterService } from '../services/jupiter';
-import { solanaClient } from '../blockchain/connection';
-import { positionMonitor } from '../services/monitor';
-import { UserSessionState } from '../types/position';
-import { globalSettings } from '../services/state'; // ✅ Fixed import
+import { Context, Markup } from "telegraf";
+import { PublicKey } from "@solana/web3.js";
+import fetch from "cross-fetch";
+import { jupiterService } from "../services/jupiter";
+import { solanaClient } from "../blockchain/connection";
+import { positionMonitor } from "../services/monitor";
+import { UserSessionState } from "../types/position";
+import { globalSettings } from "../services/state"; // ✅ Fixed import
 
 export const sessionState: Map<number, UserSessionState> = new Map();
 
@@ -19,24 +19,34 @@ export const handleContractPaste = async (ctx: Context, text: string) => {
     return; // Not a valid CA, ignore silently
   }
 
-  const fetchingMsg = await ctx.reply('🔍 Loading token data...');
+  const fetchingMsg = await ctx.reply("🔍 Loading token data...");
 
   try {
-    const response = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${targetCA}`);
+    const response = await fetch(
+      `https://api.dexscreener.com/latest/dex/tokens/${targetCA}`,
+    );
     const data = await response.json();
 
     if (!data.pairs || data.pairs.length === 0) {
-      await ctx.telegram.deleteMessage(chatId, fetchingMsg.message_id).catch(() => {});
-      return await ctx.reply('❌ Token not found on DexScreener. Double check the CA.');
+      await ctx.telegram
+        .deleteMessage(chatId, fetchingMsg.message_id)
+        .catch(() => {});
+      return await ctx.reply(
+        "❌ Token not found on DexScreener. Double check the CA.",
+      );
     }
 
     const pair = data.pairs[0];
-    const symbol = pair.baseToken.symbol || 'UNKNOWN';
-    const priceUsd = parseFloat(pair.priceUsd || '0');
-    const marketCap = pair.marketCap ? `$${pair.marketCap.toLocaleString()}` : 'N/A';
-    const liquidity = pair.liquidity?.usd ? `$${pair.liquidity.usd.toLocaleString()}` : 'N/A';
-    const change5m = pair.priceChange?.m5 ?? '0';
-    const change1h = pair.priceChange?.h1 ?? '0';
+    const symbol = pair.baseToken.symbol || "UNKNOWN";
+    const priceUsd = parseFloat(pair.priceUsd || "0");
+    const marketCap = pair.marketCap
+      ? `$${pair.marketCap.toLocaleString()}`
+      : "N/A";
+    const liquidity = pair.liquidity?.usd
+      ? `$${pair.liquidity.usd.toLocaleString()}`
+      : "N/A";
+    const change5m = pair.priceChange?.m5 ?? "0";
+    const change1h = pair.priceChange?.h1 ?? "0";
 
     sessionState.set(chatId, {
       pendingTokenCA: targetCA,
@@ -51,19 +61,20 @@ export const handleContractPaste = async (ctx: Context, text: string) => {
       change1h: String(change1h),
     });
 
-    await ctx.telegram.deleteMessage(chatId, fetchingMsg.message_id).catch(() => {});
+    await ctx.telegram
+      .deleteMessage(chatId, fetchingMsg.message_id)
+      .catch(() => {});
     await sendInteractiveDashboard(ctx, chatId, false);
-
   } catch (error) {
-    console.error('[BUY] handleContractPaste error:', error);
-    await ctx.reply('💥 Failed to load token data. Try again.');
+    console.error("[BUY] handleContractPaste error:", error);
+    await ctx.reply("💥 Failed to load token data. Try again.");
   }
 };
 
 export const sendInteractiveDashboard = async (
   ctx: Context,
   chatId: number,
-  editMessage = false
+  editMessage = false,
 ) => {
   const state = sessionState.get(chatId);
   if (!state) return;
@@ -74,17 +85,20 @@ export const sendInteractiveDashboard = async (
   const [sl1, sl2, sl3] = globalSettings.customStopLosses;
 
   const amtDisplay = state.selectedAmountSol
-    ? `${state.selectedAmountSol} SOL` : 'NOT SET';
+    ? `${state.selectedAmountSol} SOL`
+    : "NOT SET";
   const tpDisplay = state.selectedTakeProfit
-    ? `${state.selectedTakeProfit}x` : 'NOT SET';
+    ? `${state.selectedTakeProfit}x`
+    : "NOT SET";
   const slDisplay = state.selectedStopLoss
-    ? `-${(state.selectedStopLoss * 100).toFixed(0)}%` : 'NOT SET';
+    ? `-${(state.selectedStopLoss * 100).toFixed(0)}%`
+    : "NOT SET";
 
   const text =
     `🪙 *${state.pendingSymbol}*\n` +
     `\`${state.pendingTokenCA}\`\n\n` +
-    `📊 MCap: \`${state.marketCap || 'N/A'}\`\n` +
-    `💧 Liquidity: \`${state.liquidity || 'N/A'}\`\n` +
+    `📊 MCap: \`${state.marketCap || "N/A"}\`\n` +
+    `💧 Liquidity: \`${state.liquidity || "N/A"}\`\n` +
     `📈 5m: \`${state.change5m}%\` | 1h: \`${state.change1h}%\`\n\n` +
     `━━━━━━━━━━━━━━━━━━━\n` +
     `💰 Buy: \`${amtDisplay}\`\n` +
@@ -109,35 +123,37 @@ export const sendInteractiveDashboard = async (
     [
       Markup.button.callback(`🚨 -${sl1}%`, `set_sl_${sl1}`),
       Markup.button.callback(`🚨 -${sl2}%`, `set_sl_${sl2}`),
-      Markup.button.callback(`🔄 Reset`, 'reset_dashboard'),
+      Markup.button.callback(`🔄 Reset`, "reset_dashboard"),
     ],
-    [Markup.button.callback('⚡ BUY NOW ⚡', 'execute_order_swap')],
+    [Markup.button.callback("⚡ BUY NOW ⚡", "execute_order_swap")],
   ]);
 
   try {
     if (editMessage && ctx.callbackQuery) {
-      await ctx.editMessageText(text, { parse_mode: 'Markdown', ...keyboard });
+      await ctx.editMessageText(text, {
+        parse_mode: "Markdown",
+        ...keyboard,
+      } as any);
     } else {
-      await ctx.replyWithMarkdown(text, keyboard);
+      await ctx.replyWithMarkdown(text, keyboard as any);
     }
   } catch {
-    await ctx.replyWithMarkdown(text, keyboard);
+    await ctx.replyWithMarkdown(text, keyboard as any);
   }
 };
-
 
 export const executeFinalOrder = async (ctx: Context, chatId: number) => {
   const state = sessionState.get(chatId);
   if (!state || !state.pendingTokenCA) return;
 
   await ctx.reply(
-    `🚀 Buying ${state.selectedAmountSol} SOL of $${state.pendingSymbol}...`
+    `🚀 Buying ${state.selectedAmountSol} SOL of $${state.pendingSymbol}...`,
   );
 
   try {
     const quote = await jupiterService.getSwapQuote(
       state.pendingTokenCA,
-      state.selectedAmountSol!
+      state.selectedAmountSol!,
     );
     const transaction = await jupiterService.buildSwapTransaction(quote);
 
@@ -164,17 +180,17 @@ export const executeFinalOrder = async (ctx: Context, chatId: number) => {
 
     await ctx.reply(
       `🟩 *BUY ORDER EXECUTED!*\n\n` +
-      `🪙 Token: $${state.pendingSymbol}\n` +
-      `💰 Spent: ${state.selectedAmountSol} SOL\n` +
-      `🎯 TP: ${state.selectedTakeProfit}x | 🚨 SL: -${((state.selectedStopLoss || 0) * 100).toFixed(0)}%\n` +
-      `🔗 [View on Solscan](https://solscan.io/tx/${txid})\n\n` +
-      `🤖 Auto-monitoring active.`,
-      { parse_mode: 'Markdown', disable_web_page_preview: true }
+        `🪙 Token: $${state.pendingSymbol}\n` +
+        `💰 Spent: ${state.selectedAmountSol} SOL\n` +
+        `🎯 TP: ${state.selectedTakeProfit}x | 🚨 SL: -${((state.selectedStopLoss || 0) * 100).toFixed(0)}%\n` +
+        `🔗 [View on Solscan](https://solscan.io/tx/${txid})\n\n` +
+        `🤖 Auto-monitoring active.`,
+      { parse_mode: "Markdown", disable_web_page_preview: true },
     );
 
     sessionState.delete(chatId);
   } catch (error: any) {
-    console.error('[BUY] executeFinalOrder error:', error);
-    await ctx.reply(`🛑 Buy failed: ${error.message || 'Unknown error'}`);
+    console.error("[BUY] executeFinalOrder error:", error);
+    await ctx.reply(`🛑 Buy failed: ${error.message || "Unknown error"}`);
   }
 };
