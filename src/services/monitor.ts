@@ -282,8 +282,9 @@ class PositionMonitor {
     );
 
     try {
+      // Updated to modern public endpoint patterns
       const url =
-        `https://api.jup.ag/swap/v1/quote` +
+        `https://public.jupiterapi.com/quote` +
         `?inputMint=${position.tokenMint}` +
         `&outputMint=${NATIVE_SOL}` +
         `&amount=${Math.floor(position.amountTokens)}` +
@@ -328,7 +329,10 @@ class PositionMonitor {
       return;
     }
 
-    this.bot.telegram
+    // Direct access to the root telegram context engine safely
+    const targetTelegram = (this.bot as any).telegram || this.bot;
+
+    targetTelegram
       .sendMessage(this.chatId, message, {
         parse_mode: "Markdown",
         link_preview_options: { is_disabled: true },

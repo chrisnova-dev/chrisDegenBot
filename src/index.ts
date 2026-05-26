@@ -22,7 +22,7 @@ import {
   handleSettingsTextInput,
 } from './commands/settings';
 import { positionMonitor } from './services/monitor';
-import { globalSettings } from './services/state'; // ✅ No more circular import
+import { globalSettings } from './services/state'; // No more circular import
 
 const bot = new Telegraf(CONFIG.BOT_TOKEN);
 
@@ -55,7 +55,8 @@ const KEYBOARD_TEXTS = [
 
 // ─── START ─────────────────────────────────────────────────────
 bot.start((ctx) => {
-  positionMonitor.initialize(ctx.telegram as any, ctx.chat.id);
+  // Pass the root bot instance safely
+  positionMonitor.initialize(bot as any, ctx.chat.id);
   ctx.reply(
     `⚡ *NOVATRACK PRIVATE TERMINAL*\n\nSystem ready. Use the buttons below.`,
     { parse_mode: 'Markdown', ...appKeyboard }
@@ -78,7 +79,7 @@ bot.on('callback_query', async (ctx) => {
   const action = ctx.callbackQuery.data as string;
   const chatId = ctx.chat!.id;
 
-  positionMonitor.initialize(ctx.telegram as any, chatId);
+  positionMonitor.initialize(bot as any, chatId);
 
   // Wallet & withdraw callbacks
   if (action.startsWith('wallet_') || action.startsWith('with_')) {
@@ -134,7 +135,7 @@ bot.on('text', async (ctx) => {
   const chatId = ctx.chat.id;
   const state = sessionState.get(chatId) as any;
 
-  positionMonitor.initialize(ctx.telegram as any, chatId);
+  positionMonitor.initialize(bot as any, chatId);
 
   // Ignore keyboard button presses (handled by bot.hears)
   if (KEYBOARD_TEXTS.includes(text)) return;
@@ -181,7 +182,6 @@ bot.on('text', async (ctx) => {
 bot.launch()
   .then(() => {
     console.log('🤖 NOVATRACK running!');
-
-    positionMonitor.initializeFromStart(bot, ALLOWED_USER_ID);
+    positionMonitor.initialize(bot as any, ALLOWED_USER_ID);
   })
   .catch((err) => console.error('[BOT] Launch error:', err));
