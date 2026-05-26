@@ -185,7 +185,7 @@ export const executeFinalOrder = async (ctx: Context, chatId: number) => {
         `🎯 TP: ${state.selectedTakeProfit}x | 🚨 SL: -${((state.selectedStopLoss || 0) * 100).toFixed(0)}%\n` +
         `🔗 [View on Solscan](https://solscan.io/tx/${txid})\n\n` +
         `🤖 Auto-monitoring active.`,
-      { parse_mode: "Markdown", disable_web_page_preview: true },
+      { parse_mode: "Markdown", link_preview_options: { is_disabled: true } },
     );
 
     sessionState.delete(chatId);

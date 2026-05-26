@@ -1,17 +1,17 @@
-import fetch from 'cross-fetch';
-import { Telegraf } from 'telegraf';
-import { PublicKey } from '@solana/web3.js';
-import { jupiterService } from './jupiter';
-import { solanaClient } from '../blockchain/connection';
-import { Position } from '../types/position';
-import { trackedWallets, globalSettings } from './state';
-import { handleContractPaste } from '../commands/buy';
-import { CONFIG } from '../config/env';
+import fetch from "cross-fetch";
+import { Telegraf } from "telegraf";
+import { PublicKey } from "@solana/web3.js";
+import { jupiterService } from "./jupiter";
+import { solanaClient } from "../blockchain/connection";
+import { Position } from "../types/position";
+import { trackedWallets, globalSettings } from "./state";
+import { handleContractPaste } from "../commands/buy";
+import { CONFIG } from "../config/env";
 
-const JUPITER_PROGRAM = 'JUP6L81g9K7E5tN1mCYaJm69f6P586xZ3893F7A';
-const RAYDIUM_PROGRAM = '675kPX9M4SG3Nao668Zzd65HC7Wf3pUK1bMM16MR8dV8';
-const PUMPFUN_PROGRAM = '6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P';
-const NATIVE_SOL = 'So11111111111111111111111111111111111111112';
+const JUPITER_PROGRAM = "JUP6L81g9K7E5tN1mCYaJm69f6P586xZ3893F7A";
+const RAYDIUM_PROGRAM = "675kPX9M4SG3Nao668Zzd65HC7Wf3pUK1bMM16MR8dV8";
+const PUMPFUN_PROGRAM = "6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P";
+const NATIVE_SOL = "So11111111111111111111111111111111111111112";
 
 class PositionMonitor {
   private activePositions: Map<string, Position> = new Map();
@@ -59,7 +59,7 @@ class PositionMonitor {
         async (logs) => {
           if (logs.err) return;
 
-          const logStr = logs.logs.join(' ');
+          const logStr = logs.logs.join(" ");
           const isDex =
             logStr.includes(JUPITER_PROGRAM) ||
             logStr.includes(RAYDIUM_PROGRAM) ||
@@ -70,7 +70,7 @@ class PositionMonitor {
           // 2s delay — let RPC finalize the block before we parse it
           setTimeout(() => this.processTrade(address, logs.signature), 2000);
         },
-        'confirmed'
+        "confirmed",
       );
 
       trackedWallets.set(address, {
@@ -82,20 +82,24 @@ class PositionMonitor {
       });
 
       console.log(`🎯 Tracking wallet: ${name} (${address})`);
-      this.notify(`🟩 *Now tracking: ${name}*\n\`${address}\`\n\nYou'll get alerts when they trade.`);
-
+      this.notify(
+        `🟩 *Now tracking: ${name}*\n\`${address}\`\n\nYou'll get alerts when they trade.`,
+      );
     } catch (err: any) {
-      console.error('[MONITOR] addTrackedWallet error:', err);
+      console.error("[MONITOR] addTrackedWallet error:", err);
       this.notify(`❌ Failed to track wallet. Check the address is valid.`);
     }
   }
 
   private async processTrade(walletAddress: string, signature: string) {
     try {
-      const txInfo = await solanaClient.connection.getParsedTransaction(signature, {
-        maxSupportedTransactionVersion: 0,
-        commitment: 'confirmed',
-      });
+      const txInfo = await solanaClient.connection.getParsedTransaction(
+        signature,
+        {
+          maxSupportedTransactionVersion: 0,
+          commitment: "confirmed",
+        },
+      );
 
       if (!txInfo?.meta) return;
 
@@ -103,7 +107,7 @@ class PositionMonitor {
       const postBalances = txInfo.meta.postTokenBalances || [];
 
       // Find the non-SOL token in the transaction
-      let detectedMint = '';
+      let detectedMint = "";
       for (const bal of postBalances) {
         if (bal.mint !== NATIVE_SOL) {
           detectedMint = bal.mint;
@@ -113,8 +117,12 @@ class PositionMonitor {
       if (!detectedMint) return;
 
       // Check if it's a buy or sell by comparing token balance
-      const pre = preBalances.find(b => b.owner === walletAddress && b.mint === detectedMint);
-      const post = postBalances.find(b => b.owner === walletAddress && b.mint === detectedMint);
+      const pre = preBalances.find(
+        (b) => b.owner === walletAddress && b.mint === detectedMint,
+      );
+      const post = postBalances.find(
+        (b) => b.owner === walletAddress && b.mint === detectedMint,
+      );
 
       const preAmt = pre?.uiTokenAmount.uiAmount ?? 0;
       const postAmt = post?.uiTokenAmount.uiAmount ?? 0;
@@ -122,16 +130,20 @@ class PositionMonitor {
       if (preAmt === postAmt) return; // No change, skip
 
       const isBuy = postAmt > preAmt;
-      const actionEmoji = isBuy ? '🟢' : '🔴';
-      const actionWord = isBuy ? 'BOUGHT' : 'SOLD';
+      const actionEmoji = isBuy ? "🟢" : "🔴";
+      const actionWord = isBuy ? "BOUGHT" : "SOLD";
 
       const wallet = trackedWallets.get(walletAddress);
-      const walletName = wallet?.name || `${walletAddress.slice(0, 6)}...${walletAddress.slice(-4)}`;
+      const walletName =
+        wallet?.name ||
+        `${walletAddress.slice(0, 6)}...${walletAddress.slice(-4)}`;
 
       // Try to get token symbol from DexScreener
       let tokenDisplay = `${detectedMint.slice(0, 8)}...`;
       try {
-        const res = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${detectedMint}`);
+        const res = await fetch(
+          `https://api.dexscreener.com/latest/dex/tokens/${detectedMint}`,
+        );
         const dexData = await res.json();
         if (dexData.pairs?.length > 0) {
           tokenDisplay = `$${dexData.pairs[0].baseToken.symbol}`;
@@ -143,10 +155,10 @@ class PositionMonitor {
       // Send alert
       this.notify(
         `${actionEmoji} *${walletName} ${actionWord}*\n\n` +
-        `🪙 Token: *${tokenDisplay}*\n` +
-        `📝 CA: \`${detectedMint}\`\n` +
-        `🔗 [Solscan](https://solscan.io/tx/${signature})\n\n` +
-        `_Paste the CA to buy instantly_`
+          `🪙 Token: *${tokenDisplay}*\n` +
+          `📝 CA: \`${detectedMint}\`\n` +
+          `🔗 [Solscan](https://solscan.io/tx/${signature})\n\n` +
+          `_Paste the CA to buy instantly_`,
       );
 
       // If it's a buy — show trade dashboard automatically
@@ -158,16 +170,15 @@ class PositionMonitor {
             this.bot!.telegram.sendMessage(this.chatId!, text, opts),
           replyWithMarkdown: (text: string, extra?: any) =>
             this.bot!.telegram.sendMessage(this.chatId!, text, {
-              parse_mode: 'Markdown',
+              parse_mode: "Markdown",
               ...extra,
             }),
         };
         await handleContractPaste(mockCtx, detectedMint);
       }
-
     } catch (err: any) {
       // Log the error but NEVER crash
-      console.error('[MONITOR] processTrade error:', err?.message || err);
+      console.error("[MONITOR] processTrade error:", err?.message || err);
     }
   }
 
@@ -189,19 +200,19 @@ class PositionMonitor {
 
   private async startMonitoringLoop() {
     this.isLoopRunning = true;
-    console.log('🔄 [MONITOR] Price monitoring loop started');
+    console.log("🔄 [MONITOR] Price monitoring loop started");
 
     while (this.activePositions.size > 0) {
       try {
         const mints = Array.from(this.activePositions.keys());
 
         const res = await fetch(
-          `https://lite-api.jup.ag/price/v2?ids=${mints.join(',')}`
+          `https://lite-api.jup.ag/price/v2?ids=${mints.join(",")}`,
         );
 
         if (!res.ok) {
           console.error(`[MONITOR] Price API error: ${res.status}`);
-          await new Promise(r => setTimeout(r, 5000)); // Wait longer on error
+          await new Promise((r) => setTimeout(r, 5000)); // Wait longer on error
           continue;
         }
 
@@ -217,12 +228,13 @@ class PositionMonitor {
           if (!currentPrice || isNaN(currentPrice)) continue;
 
           const multiplier = currentPrice / position.buyPriceUsd;
-          const lossPercent = (position.buyPriceUsd - currentPrice) / position.buyPriceUsd;
+          const lossPercent =
+            (position.buyPriceUsd - currentPrice) / position.buyPriceUsd;
 
           console.log(
             `⚡ ${position.tokenSymbol} | ` +
-            `${multiplier.toFixed(2)}x | ` +
-            `${lossPercent > 0 ? '-' : '+'}${Math.abs(lossPercent * 100).toFixed(1)}%`
+              `${multiplier.toFixed(2)}x | ` +
+              `${lossPercent > 0 ? "-" : "+"}${Math.abs(lossPercent * 100).toFixed(1)}%`,
           );
 
           // Take profit check
@@ -231,7 +243,10 @@ class PositionMonitor {
             position.takeProfitMultiplier > 0 &&
             multiplier >= position.takeProfitMultiplier
           ) {
-            await this.triggerAutoSell(position, `🎯 Take Profit Hit (${multiplier.toFixed(2)}x)`);
+            await this.triggerAutoSell(
+              position,
+              `🎯 Take Profit Hit (${multiplier.toFixed(2)}x)`,
+            );
             continue;
           }
 
@@ -243,19 +258,19 @@ class PositionMonitor {
           ) {
             await this.triggerAutoSell(
               position,
-              `🚨 Stop Loss Hit (-${(position.stopLossPercent * 100).toFixed(0)}%)`
+              `🚨 Stop Loss Hit (-${(position.stopLossPercent * 100).toFixed(0)}%)`,
             );
           }
         }
       } catch (err: any) {
-        console.error('[MONITOR] Loop error:', err?.message || err);
+        console.error("[MONITOR] Loop error:", err?.message || err);
       }
 
-      await new Promise(r => setTimeout(r, 2000));
+      await new Promise((r) => setTimeout(r, 2000));
     }
 
     this.isLoopRunning = false;
-    console.log('⏹️ [MONITOR] Price loop stopped — no active positions');
+    console.log("⏹️ [MONITOR] Price loop stopped — no active positions");
   }
 
   private async triggerAutoSell(position: Position, reason: string) {
@@ -263,7 +278,7 @@ class PositionMonitor {
     this.activePositions.delete(position.tokenMint);
 
     this.notify(
-      `⚠️ *AUTO SELL TRIGGERED*\n${reason}\n\nSelling $${position.tokenSymbol}...`
+      `⚠️ *AUTO SELL TRIGGERED*\n${reason}\n\nSelling $${position.tokenSymbol}...`,
     );
 
     try {
@@ -283,22 +298,21 @@ class PositionMonitor {
 
       const txid = await solanaClient.connection.sendRawTransaction(
         tx.serialize(),
-        { skipPreflight: true, maxRetries: 3 }
+        { skipPreflight: true, maxRetries: 3 },
       );
 
       this.notify(
         `🟩 *AUTO SELL COMPLETE*\n\n` +
-        `🪙 Token: $${position.tokenSymbol}\n` +
-        `📦 Reason: ${reason}\n` +
-        `🔗 [Solscan](https://solscan.io/tx/${txid})`
+          `🪙 Token: $${position.tokenSymbol}\n` +
+          `📦 Reason: ${reason}\n` +
+          `🔗 [Solscan](https://solscan.io/tx/${txid})`,
       );
-
     } catch (err: any) {
-      console.error('[MONITOR] triggerAutoSell error:', err?.message || err);
+      console.error("[MONITOR] triggerAutoSell error:", err?.message || err);
       this.notify(
         `🛑 *AUTO SELL FAILED*\n` +
-        `${err.message || 'Unknown error'}\n\n` +
-        `⚠️ Sell manually!\nCA: \`${position.tokenMint}\``
+          `${err.message || "Unknown error"}\n\n` +
+          `⚠️ Sell manually!\nCA: \`${position.tokenMint}\``,
       );
     }
   }
@@ -308,17 +322,19 @@ class PositionMonitor {
   private notify(message: string) {
     // Guard — if somehow not initialized, just log it
     if (!this.bot || !this.chatId) {
-      console.log(`[MONITOR] Not initialized. Missed alert:\n${message.slice(0, 80)}`);
+      console.log(
+        `[MONITOR] Not initialized. Missed alert:\n${message.slice(0, 80)}`,
+      );
       return;
     }
 
     this.bot.telegram
       .sendMessage(this.chatId, message, {
-        parse_mode: 'Markdown',
-        disable_web_page_preview: true,
+        parse_mode: "Markdown",
+        link_preview_options: { is_disabled: true },
       })
       .catch((err: any) => {
-        console.error('[MONITOR] notify failed:', err?.message || err);
+        console.error("[MONITOR] notify failed:", err?.message || err);
       });
   }
 }
