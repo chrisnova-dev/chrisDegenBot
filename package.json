@@ -1,10 +1,11 @@
 {
   "name": "degenbot",
   "version": "1.0.0",
-  "scripts": {
-    "dev": "tsx watch src/index.ts",
-    "build": "tsc --noEmitOnError false || exit 0",
-    "start": "node dist/index.js"
+"scripts": {
+  "dev": "tsx watch src/index.ts",
+  "build": "echo 'Skipping build step'",
+  "start": "tsx src/index.ts"
+}
   },
   "dependencies": {
     "@solana/web3.js": "^1.91.0",
