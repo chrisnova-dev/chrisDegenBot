@@ -17,20 +17,17 @@ class PositionMonitor {
   private activePositions: Map<string, Position> = new Map();
   private isLoopRunning = false;
 
-  // One single bot instance and chat ID — set once, used forever
   private bot: Telegraf | null = null;
   private chatId: number | null = null;
 
   // ─── INIT ────────────────────────────────────────────────────
 
-  // Called at bot.launch() — guaranteed to run before any wallet alert
   public initializeFromStart(bot: Telegraf, chatId: number) {
     this.bot = bot;
     this.chatId = chatId;
     console.log(`✅ [MONITOR] Ready. Alerts → Chat ID: ${chatId}`);
   }
 
-  // Called from ctx handlers (keeps same instance, won't overwrite)
   public initialize(bot: Telegraf, chatId: number) {
     if (!this.bot) this.bot = bot;
     if (!this.chatId) this.chatId = chatId;
@@ -52,7 +49,7 @@ class PositionMonitor {
 
   public async addTrackedWallet(address: string, name: string) {
     try {
-      new PublicKey(address); // Validate address first
+      new PublicKey(address);
 
       const subId = solanaClient.connection.onLogs(
         new PublicKey(address),
@@ -67,7 +64,6 @@ class PositionMonitor {
 
           if (!isDex) return;
 
-          // 2s delay — let RPC finalize the block before we parse it
           setTimeout(() => this.processTrade(address, logs.signature), 2000);
         },
         "confirmed",
@@ -106,7 +102,6 @@ class PositionMonitor {
       const preBalances = txInfo.meta.preTokenBalances || [];
       const postBalances = txInfo.meta.postTokenBalances || [];
 
-      // Find the non-SOL token in the transaction
       let detectedMint = "";
       for (const bal of postBalances) {
         if (bal.mint !== NATIVE_SOL) {
@@ -116,7 +111,6 @@ class PositionMonitor {
       }
       if (!detectedMint) return;
 
-      // Check if it's a buy or sell by comparing token balance
       const pre = preBalances.find(
         (b) => b.owner === walletAddress && b.mint === detectedMint,
       );
@@ -127,7 +121,7 @@ class PositionMonitor {
       const preAmt = pre?.uiTokenAmount.uiAmount ?? 0;
       const postAmt = post?.uiTokenAmount.uiAmount ?? 0;
 
-      if (preAmt === postAmt) return; // No change, skip
+      if (preAmt === postAmt) return;
 
       const isBuy = postAmt > preAmt;
       const actionEmoji = isBuy ? "🟢" : "🔴";
@@ -138,7 +132,6 @@ class PositionMonitor {
         wallet?.name ||
         `${walletAddress.slice(0, 6)}...${walletAddress.slice(-4)}`;
 
-      // Try to get token symbol from DexScreener
       let tokenDisplay = `${detectedMint.slice(0, 8)}...`;
       try {
         const res = await fetch(
@@ -149,10 +142,9 @@ class PositionMonitor {
           tokenDisplay = `$${dexData.pairs[0].baseToken.symbol}`;
         }
       } catch {
-        // DexScreener failed, use short address — not a crash
+        // Safe fallback
       }
 
-      // Send alert
       this.notify(
         `${actionEmoji} *${walletName} ${actionWord}*\n\n` +
           `🪙 Token: *${tokenDisplay}*\n` +
@@ -161,7 +153,6 @@ class PositionMonitor {
           `_Paste the CA to buy instantly_`,
       );
 
-      // If it's a buy — show trade dashboard automatically
       if (isBuy && this.bot && this.chatId) {
         const mockCtx: any = {
           chat: { id: this.chatId },
@@ -177,7 +168,6 @@ class PositionMonitor {
         await handleContractPaste(mockCtx, detectedMint);
       }
     } catch (err: any) {
-      // Log the error but NEVER crash
       console.error("[MONITOR] processTrade error:", err?.message || err);
     }
   }
@@ -206,13 +196,14 @@ class PositionMonitor {
       try {
         const mints = Array.from(this.activePositions.keys());
 
+        // FIX 1: Migrated from broken /price/v2 to the live Jupiter V3 Pricing endpoint
         const res = await fetch(
-          `https://lite-api.jup.ag/price/v2?ids=${mints.join(",")}`,
+          `https://lite-api.jup.ag/price/v3?ids=${mints.join(",")}`,
         );
 
         if (!res.ok) {
           console.error(`[MONITOR] Price API error: ${res.status}`);
-          await new Promise((r) => setTimeout(r, 5000)); // Wait longer on error
+          await new Promise((r) => setTimeout(r, 5000));
           continue;
         }
 
@@ -224,6 +215,7 @@ class PositionMonitor {
           const priceInfo = priceData[mint];
           if (!position || !priceInfo) continue;
 
+          // FIX 2: V3 updates field name parsing structures down to .price
           const currentPrice = parseFloat(priceInfo.price);
           if (!currentPrice || isNaN(currentPrice)) continue;
 
@@ -237,7 +229,6 @@ class PositionMonitor {
               `${lossPercent > 0 ? "-" : "+"}${Math.abs(lossPercent * 100).toFixed(1)}%`,
           );
 
-          // Take profit check
           if (
             globalSettings.autoSellEnabled &&
             position.takeProfitMultiplier > 0 &&
@@ -250,7 +241,6 @@ class PositionMonitor {
             continue;
           }
 
-          // Stop loss check
           if (
             globalSettings.autoSellEnabled &&
             position.stopLossPercent > 0 &&
@@ -274,7 +264,6 @@ class PositionMonitor {
   }
 
   private async triggerAutoSell(position: Position, reason: string) {
-    // Remove first — prevents double sell if loop runs again fast
     this.activePositions.delete(position.tokenMint);
 
     this.notify(
@@ -282,18 +271,15 @@ class PositionMonitor {
     );
 
     try {
-      // Updated to modern public endpoint patterns
-      const url =
-        `https://public.jupiterapi.com/quote` +
-        `?inputMint=${position.tokenMint}` +
-        `&outputMint=${NATIVE_SOL}` +
-        `&amount=${Math.floor(position.amountTokens)}` +
-        `&slippageBps=300`;
+      // FIX 3: Route auto-sell requests completely through our verified V2 quote service layers
+      const sellQuote = await jupiterService.getSwapQuote(
+        NATIVE_SOL, 
+        position.amountTokens, 
+        300 // 3% slippage tolerance for volatile stops
+      );
 
-      const res = await fetch(url);
-      if (!res.ok) throw new Error(`Sell quote failed: ${res.status}`);
+      if (!sellQuote) throw new Error("Could not construct an operational auto-sell quote payload.");
 
-      const sellQuote = await res.json();
       const tx = await jupiterService.buildSwapTransaction(sellQuote);
       tx.sign([solanaClient.wallet]);
 
@@ -321,7 +307,6 @@ class PositionMonitor {
   // ─── SAFE NOTIFY ─────────────────────────────────────────────
 
   private notify(message: string) {
-    // Guard — if somehow not initialized, just log it
     if (!this.bot || !this.chatId) {
       console.log(
         `[MONITOR] Not initialized. Missed alert:\n${message.slice(0, 80)}`,
@@ -329,7 +314,6 @@ class PositionMonitor {
       return;
     }
 
-    // Direct access to the root telegram context engine safely
     const targetTelegram = (this.bot as any).telegram || this.bot;
 
     targetTelegram
